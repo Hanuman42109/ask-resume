@@ -54,12 +54,12 @@ User Question
 
 ## Features
 
-- **Real-time streaming** — responses stream token by token via Server-Sent Events
-- **Source citations** — every answer shows which resume chunks were retrieved
-- **Dark / Light / System theme** — persisted in localStorage
-- **Live health indicator** — polls backend every 10s, shows real connectivity status
-- **Copy button** — one-click copy on every answer
-- **Suggested questions** — quick-fire prompts always visible
+- **Real-time streaming** - responses stream token by token via Server-Sent Events
+- **Source citations** - every answer shows which resume chunks were retrieved
+- **Dark / Light / System theme** - persisted in localStorage
+- **Live health indicator** - polls backend every 10s, shows real connectivity status
+- **Copy button** - one-click copy on every answer
+- **Suggested questions** - quick-fire prompts always visible
 
 ---
 
@@ -143,7 +143,7 @@ ask-my-resume/
 
 ## Next Steps
 
-- [ ] Tool calling — fetch live GitHub stats in responses
-- [ ] Multi-document RAG — ingest projects, blog posts separately
+- [ ] Tool calling - fetch live GitHub stats in responses
+- [ ] Multi-document RAG - ingest projects, blog posts separately
 - [ ] Reranking for better retrieval accuracy
 - [ ] React Native mobile version
