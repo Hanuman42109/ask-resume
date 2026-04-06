@@ -46,7 +46,8 @@ class RAGPipeline:
             """, emb_str, TOP_K)
 
             results = [dict(r) for r in rows]
-            print(f"[retrieve] Found {len(results)} chunks, top similarity: {results[0]['similarity']:.3f if results else 'N/A'}")
+            top_sim = f"{results[0]['similarity']:.3f}" if results else "N/A"
+            print(f"[retrieve] Found {len(results)} chunks, top similarity: {top_sim}")
             return results
         finally:
             await conn.close()
