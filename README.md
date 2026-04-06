@@ -47,7 +47,7 @@ User Question
 | Backend | FastAPI (Python), async/await |
 | Vector DB | PostgreSQL + pgvector |
 | Embeddings | sentence-transformers `all-MiniLM-L6-v2` (local) |
-| LLM | Groq API — Llama 3.3 70B Versatile |
+| LLM | Groq API - Llama 3.3 70B Versatile |
 | Deploy | Vercel (frontend) + Railway (backend + DB) |
 
 ---
