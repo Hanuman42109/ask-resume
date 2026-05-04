@@ -1,149 +1,159 @@
-# Ask My Resume - AI Portfolio Chatbot
+# Ask My Resume — RAG Portfolio Chatbot
 
-> A RAG-powered chatbot that answers recruiter questions about my skills, experience, and projects using real-time semantic search and LLM streaming.
-
-🔗 **[Live Demo](https://your-app.vercel.app)** &nbsp;|&nbsp; ⚙️ **[Backend API](https://your-backend.railway.app/docs)**
-
----
-
-## What It Does
-
-Instead of sending a static PDF resume, this app lets recruiters and hiring managers **ask natural language questions** and get accurate, context-grounded answers in real time.
+A production-ready RAG application that lets anyone chat with your resume/portfolio.
+Built with **FastAPI + pgvector + OpenAI + React + TypeScript**.
 
 ```
-"Does Sai have production React experience?"
-→ Retrieves relevant resume chunks via vector similarity search
-→ Streams a grounded answer from Llama 3.3 70B
-→ Shows which sources were used
+┌─────────────────────────────────────────────────────────┐
+│  User question                                          │
+│       │                                                 │
+│       ▼                                                 │
+│  [Embed question] ──► pgvector cosine search            │
+│                              │                          │
+│                    Top-K relevant chunks                │
+│                              │                          │
+│                    [LLM: GPT-4o / Claude]               │
+│                              │                          │
+│                    Streamed answer ──► React UI         │
+└─────────────────────────────────────────────────────────┘
 ```
 
----
+## Stack
 
-## Architecture
-
-```
-User Question
-     │
-     ▼
-[sentence-transformers]     ← local embedding, no API cost
-     │  384-dim vector
-     ▼
-[pgvector cosine search]    ← top-5 most relevant resume chunks
-     │  retrieved context
-     ▼
-[Groq / Llama 3.3 70B]      ← grounded answer generation
-     │  SSE token stream
-     ▼
-[React frontend]            ← real-time streaming UI
-```
+| Layer       | Tech                                    |
+|-------------|-----------------------------------------|
+| Frontend    | React + Vite + SSE streaming            |
+| Backend     | FastAPI (Python)                        |
+| Vector DB   | PostgreSQL + pgvector                   |
+| Embeddings  | OpenAI `text-embedding-3-small`         |
+| LLM         | GPT-4o (or Claude via env var)          |
+| Deploy      | Vercel (FE) + Railway/Render (BE)       |
 
 ---
 
-## Tech Stack
+## Quick Start
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 18, Vite, SSE streaming |
-| Backend | FastAPI (Python), async/await |
-| Vector DB | PostgreSQL + pgvector |
-| Embeddings | sentence-transformers `all-MiniLM-L6-v2` (local) |
-| LLM | Groq API - Llama 3.3 70B Versatile |
-| Deploy | Vercel (frontend) + Railway (backend + DB) |
-
----
-
-## Features
-
-- **Real-time streaming** - responses stream token by token via Server-Sent Events
-- **Source citations** - every answer shows which resume chunks were retrieved
-- **Dark / Light / System theme** - persisted in localStorage
-- **Live health indicator** - polls backend every 10s, shows real connectivity status
-- **Copy button** - one-click copy on every answer
-- **Suggested questions** - quick-fire prompts always visible
-
----
-
-## Run Locally
-
-### Prerequisites
-- Docker Desktop
-- Python 3.11
-- Node.js 18+
-- [Groq API key](https://console.groq.com) (free)
-
-### Setup
+### 1. Start PostgreSQL with pgvector
 
 ```bash
-# 1. Start PostgreSQL with pgvector
-docker compose up -d
+docker-compose up -d
+```
 
-# 2. Backend
+### 2. Backend setup
+
+```bash
 cd backend
-py -3.11 -m venv venv
-source venv/Scripts/activate   # Windows
+python -m venv venv
+source venv/bin/activate       # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env           # add your GROQ_API_KEY
-uvicorn main:app --reload --port 8000
 
-# 3. Frontend
-cd ../frontend
+cp .env.example .env
+# Edit .env — add your OPENAI_API_KEY
+
+uvicorn main:app --reload --port 8000
+```
+
+### 3. Frontend setup
+
+```bash
+cd frontend
 npm install
 npm run dev
+# → http://localhost:5173
 ```
 
-Open **http://localhost:5173**, click **⊕ ingest docs**, paste your resume, start chatting.
+### 4. Ingest your resume
 
----
+Open the app, click **"⊕ ingest docs"**, paste your resume text, click **"Ingest & embed →"**.
 
-## Project Structure
-
-```
-ask-my-resume/
-├── backend/
-│   ├── main.py        # FastAPI app, SSE streaming endpoints
-│   ├── rag.py         # RAG pipeline: embed → retrieve → stream
-│   ├── ingest.py      # Chunking, embedding, pgvector upsert
-│   └── requirements.txt
-├── frontend/
-│   └── src/
-│       ├── App.jsx
-│       ├── hooks/
-│       │   ├── useRAGChat.js      # SSE stream handling
-│       │   └── useHealthCheck.js  # Backend health polling
-│       └── components/
-│           ├── ChatMessage.jsx    # Message + citations + copy
-│           ├── ChatInput.jsx      # Input with loading states
-│           └── IngestPanel.jsx    # Document ingestion UI
-└── docker-compose.yml
-```
+That's it — start chatting.
 
 ---
 
 ## API Endpoints
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/health` | Health check |
-| POST | `/ingest` | Chunk, embed, store documents |
-| POST | `/chat` | Stream RAG-powered answer |
-| GET | `/chunks` | List stored chunks (debug) |
+| Method | Path       | Description                          |
+|--------|------------|--------------------------------------|
+| POST   | `/ingest`  | Chunk, embed, store documents        |
+| POST   | `/chat`    | Stream a RAG-powered answer          |
+| GET    | `/chunks`  | Debug: list stored chunks            |
+| GET    | `/health`  | Health check                         |
+
+### POST /ingest
+```json
+{
+  "text": "Paste resume or portfolio text here...",
+  "source": "resume"
+}
+```
+
+### POST /chat
+```json
+{
+  "message": "What databases has Sai worked with?",
+  "conversation_history": []
+}
+```
+Returns a Server-Sent Events stream of `{ "token": "..." }` objects.
 
 ---
 
-## What I Learned Building This
+## How It Works
 
-- RAG pipeline design (chunking strategy, overlap, embedding dimensions)
-- pgvector cosine similarity search with parameterized queries
-- FastAPI async streaming with Server-Sent Events
-- React SSE consumption with `ReadableStream` API
-- Local embeddings with sentence-transformers (zero API cost)
-- Groq API integration (OpenAI-compatible, drop-in swap)
+### Ingestion pipeline (`ingest.py`)
+1. Split text into **400-char chunks with 80-char overlap**
+2. Embed all chunks in one OpenAI API call
+3. Upsert into `resume_chunks` table with `vector(1536)` column
+4. IVFFlat index for fast cosine similarity search
+
+### RAG pipeline (`rag.py`)
+1. Embed the user's question
+2. Query pgvector: `ORDER BY embedding <=> $1::vector LIMIT 5`
+3. Inject top-5 chunks into the LLM context
+4. Stream the response back via SSE
+
+### Frontend (`useRAGChat.js`)
+- Reads SSE stream with `ReadableStream` API
+- Updates React state token-by-token for real-time display
+- Keeps last 6 messages as conversation history
 
 ---
 
-## Next Steps
+## Switching to Claude
 
-- [ ] Tool calling - fetch live GitHub stats in responses
-- [ ] Multi-document RAG - ingest projects, blog posts separately
-- [ ] Reranking for better retrieval accuracy
-- [ ] React Native mobile version
+In `.env`:
+```
+CHAT_MODEL=claude-3-5-sonnet-20241022
+```
+
+Then update `rag.py` to use the Anthropic client:
+```python
+from anthropic import AsyncAnthropic
+client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+```
+
+---
+
+## Next Steps (Project 2)
+
+Once this works, extend it:
+- **Tool calling** — let the bot fetch your GitHub stars, LinkedIn, live job postings
+- **Multi-source RAG** — ingest multiple docs (projects, blog posts, case studies)
+- **Evals** — add LangSmith tracing to measure answer quality
+- **React Native** — port to mobile with `@anthropic-ai/sdk`
+
+---
+
+## Deployment
+
+**Frontend** → Vercel (just `npm run build` and point Vercel at `/frontend`)
+
+**Backend** → Railway or Render
+- Set `DATABASE_URL` to your hosted PostgreSQL (Railway provides this free)
+- Set `OPENAI_API_KEY`
+- The `pgvector` extension is available on Railway PostgreSQL by default
+
+```bash
+# Set VITE_API_URL in frontend before building for production
+VITE_API_URL=https://your-backend.railway.app npm run build
+```

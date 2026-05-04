@@ -32,23 +32,25 @@ function useTheme() {
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => {
-      if (theme === "system")
+      if (theme === "system") {
         document.documentElement.setAttribute("data-theme", mq.matches ? "dark" : "light");
+      }
     };
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, [theme]);
 
-  const cycleTheme = () =>
-    setTheme(prev => THEMES[(THEMES.indexOf(prev) + 1) % THEMES.length]);
+  const cycleTheme = () => {
+    setTheme((prev) => THEMES[(THEMES.indexOf(prev) + 1) % THEMES.length]);
+  };
 
   return { theme, cycleTheme };
 }
 
 const STATUS_CONFIG = {
-  checking: { label: "connecting...", cls: "status-dot status-checking" },
-  online:   { label: "pgvector · live", cls: "status-dot status-online" },
-  offline:  { label: "backend offline", cls: "status-dot status-offline" },
+  checking: { label: "connecting...", className: "status-dot status-checking" },
+  online:   { label: "pgvector · live", className: "status-dot status-online" },
+  offline:  { label: "backend offline", className: "status-dot status-offline" },
 };
 
 export default function App() {
@@ -57,7 +59,7 @@ export default function App() {
   const { theme, cycleTheme } = useTheme();
   const backendStatus = useHealthCheck();
   const bottomRef = useRef(null);
-  const { label, cls } = STATUS_CONFIG[backendStatus];
+  const { label, className } = STATUS_CONFIG[backendStatus];
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -65,6 +67,7 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* Header */}
       <header className="header">
         <div className="header-left">
           <div className="logo-mark">
@@ -78,8 +81,10 @@ export default function App() {
           </div>
         </div>
         <div className="header-right">
-          <div className={cls} />
-          <span className={`status-label ${backendStatus === "offline" ? "status-label-offline" : ""}`}>{label}</span>
+          <div className={className} />
+          <span className={`status-label ${backendStatus === "offline" ? "status-label-offline" : ""}`}>
+            {label}
+          </span>
           <button className="btn-ghost btn-theme" onClick={cycleTheme}>
             <span className="theme-icon">{THEME_ICONS[theme]}</span>
             <span className="theme-label">{THEME_LABELS[theme]}</span>
@@ -95,14 +100,19 @@ export default function App() {
           <IngestPanel onSuccess={() => setShowIngest(false)} />
         ) : (
           <>
+            {/* Messages */}
             <div className="messages">
               {messages.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-ascii">{`┌─────────────────────────────────┐\n│  RAG pipeline ready.            │\n│  Ask anything about Sai.        │\n└─────────────────────────────────┘`}</div>
+                  <div className="empty-ascii">
+                    {`┌─────────────────────────────────┐\n│  RAG pipeline ready.            │\n│  Ask anything about Sai.        │\n└─────────────────────────────────┘`}
+                  </div>
                   <p className="empty-hint">Try one of these:</p>
                   <div className="suggestions">
-                    {SUGGESTED_QUESTIONS.map(q => (
-                      <button key={q} className="suggestion-chip" onClick={() => sendMessage(q)}>{q}</button>
+                    {SUGGESTED_QUESTIONS.map((q) => (
+                      <button key={q} className="suggestion-chip" onClick={() => sendMessage(q)}>
+                        {q}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -112,17 +122,21 @@ export default function App() {
               <div ref={bottomRef} />
             </div>
 
+            {/* Persistent suggestions bar — visible after first message */}
             {messages.length > 0 && !isStreaming && (
               <div className="suggestions-bar">
                 <span className="suggestions-bar-label">suggest:</span>
                 <div className="suggestions-bar-chips">
-                  {SUGGESTED_QUESTIONS.slice(0, 3).map(q => (
-                    <button key={q} className="suggestion-chip suggestion-chip-sm" onClick={() => sendMessage(q)}>{q}</button>
+                  {SUGGESTED_QUESTIONS.slice(0, 3).map((q) => (
+                    <button key={q} className="suggestion-chip suggestion-chip-sm" onClick={() => sendMessage(q)}>
+                      {q}
+                    </button>
                   ))}
                 </div>
               </div>
             )}
 
+            {/* Input */}
             <div className="input-area">
               <ChatInput
                 onSend={sendMessage}

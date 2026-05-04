@@ -15,6 +15,7 @@ export default function ChatMessage({ message }) {
     <div className={`message ${isUser ? "message-user" : "message-assistant"} ${message.isError ? "message-error" : ""}`}>
       <div className="message-label-row">
         <span className="message-label">{isUser ? "you >" : "rag >"}</span>
+        {/* Copy button — only on assistant messages with content */}
         {!isUser && message.content && !message.loading && (
           <button className="btn-copy" onClick={handleCopy}>
             {copied ? "✓ copied" : "copy"}
@@ -23,6 +24,7 @@ export default function ChatMessage({ message }) {
       </div>
 
       <div className="message-content">
+        {/* Loading state — waiting for first token */}
         {message.loading && !message.content ? (
           <span className="loading-indicator">
             <span className="loading-dot" />
@@ -37,12 +39,16 @@ export default function ChatMessage({ message }) {
         )}
       </div>
 
+      {/* Citations */}
       {!isUser && message.citations && message.citations.length > 0 && (
         <div className="citations">
-          <button className="citations-toggle" onClick={() => setShowCitations(!showCitations)}>
-            <span>⊞</span>
+          <button
+            className="citations-toggle"
+            onClick={() => setShowCitations(!showCitations)}
+          >
+            <span className="citations-icon">⊞</span>
             {message.citations.length} source{message.citations.length > 1 ? "s" : ""} used
-            <span>{showCitations ? "▲" : "▼"}</span>
+            <span className="citations-arrow">{showCitations ? "▲" : "▼"}</span>
           </button>
           {showCitations && (
             <div className="citations-list">

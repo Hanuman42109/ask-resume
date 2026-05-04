@@ -1,6 +1,12 @@
+/**
+ * useRAGChat
+ * Handles streaming SSE from the backend.
+ * SSE event types: citations | token | done | error
+ */
+
 import { useState, useCallback } from "react";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 export function useRAGChat() {
   const [messages, setMessages] = useState([]);
@@ -11,25 +17,32 @@ export function useRAGChat() {
     if (!userText.trim() || isStreaming) return;
 
     const userMsg = { role: "user", content: userText };
-    const history = messages.slice(-6).map(m => ({ role: m.role, content: m.content }));
     const newMessages = [...messages, userMsg];
-
-    setMessages([...newMessages, { role: "assistant", content: "", citations: [], loading: true }]);
+    setMessages(newMessages);
     setIsStreaming(true);
     setIsWaiting(true);
 
+    // Placeholder assistant message
+    setMessages([...newMessages, { role: "assistant", content: "", citations: [], loading: true }]);
+
     try {
-      const res = await fetch(`${API_BASE}/chat`, {
+      const response = await fetch(`${API_BASE}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userText, conversation_history: history }),
+        body: JSON.stringify({
+          message: userText,
+          conversation_history: messages.slice(-6).map(m => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      const reader = res.body.getReader();
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buf = "";
+      let buffer = "";
       let fullContent = "";
       let citations = [];
 
@@ -37,9 +50,9 @@ export function useRAGChat() {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop();
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop(); // keep incomplete line
 
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
@@ -47,26 +60,46 @@ export function useRAGChat() {
           if (!raw) continue;
 
           let event;
-          try { event = JSON.parse(raw); }
-          catch { continue; }
+          try {
+            event = JSON.parse(raw);
+          } catch (e) {
+            console.warn("Failed to parse SSE line:", raw, e);
+            continue;
+          }
+
+          console.log("SSE event:", event); // debug — visible in browser console
 
           if (event.type === "citations") {
             citations = event.chunks || [];
-            setMessages(prev => {
-              const u = [...prev];
-              u[u.length - 1] = { role: "assistant", content: "", citations, loading: true };
-              return u;
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                role: "assistant",
+                content: "",
+                citations,
+                loading: true,
+              };
+              return updated;
             });
           }
 
           else if (event.type === "token") {
             setIsWaiting(false);
             fullContent += event.value;
-            setMessages(prev => {
-              const u = [...prev];
-              u[u.length - 1] = { role: "assistant", content: fullContent, citations, loading: false };
-              return u;
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                role: "assistant",
+                content: fullContent,
+                citations,
+                loading: false,
+              };
+              return updated;
             });
+          }
+
+          else if (event.type === "done") {
+            break;
           }
 
           else if (event.type === "error") {
@@ -75,10 +108,17 @@ export function useRAGChat() {
         }
       }
     } catch (err) {
-      setMessages(prev => {
-        const u = [...prev];
-        u[u.length - 1] = { role: "assistant", content: `Error: ${err.message}`, citations: [], loading: false, isError: true };
-        return u;
+      console.error("Chat error:", err);
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          role: "assistant",
+          content: `Error: ${err.message}`,
+          citations: [],
+          loading: false,
+          isError: true,
+        };
+        return updated;
       });
     } finally {
       setIsStreaming(false);
@@ -87,5 +127,6 @@ export function useRAGChat() {
   }, [messages, isStreaming]);
 
   const clearMessages = useCallback(() => setMessages([]), []);
+
   return { messages, isStreaming, isWaiting, sendMessage, clearMessages };
 }
