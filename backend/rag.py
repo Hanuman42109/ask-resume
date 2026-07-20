@@ -4,31 +4,29 @@ load_dotenv()
 import os
 import asyncpg
 from openai import AsyncOpenAI
+from nomic import embed
 from typing import AsyncGenerator
 
+# Configuration
 DATABASE_URL  = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/resume_db")
 GROQ_API_KEY  = os.getenv("GROQ_API_KEY")
 CHAT_MODEL    = os.getenv("CHAT_MODEL", "llama-3.3-70b-versatile")
-EMBED_MODEL   = "nomic-embed-text-v1_5"
-EMBEDDING_DIM = None
+EMBED_MODEL   = "nomic-embed-text-v1.5"
+EMBEDDING_DIM = 768
 TOP_K         = 5
 MAX_TOKENS    = 1024
 
-# Local embedding fallback for development (no network needed)
+# Local embedding fallback for development
 USE_LOCAL_EMBED = os.getenv("USE_LOCAL_EMBED", "false").lower() == "true"
 if USE_LOCAL_EMBED:
     from sentence_transformers import SentenceTransformer
-    embedder = SentenceTransformer("all-MiniLM-L6-v2")
-    try:
-        EMBEDDING_DIM = embedder.get_sentence_embedding_dimension()
-    except Exception:
-        EMBEDDING_DIM = len(embedder.encode("test", convert_to_numpy=True))
-    print(f"[rag] Using local embeddings (SentenceTransformers) — dim={EMBEDDING_DIM}")
+    embedder = SentenceTransformer("all-mpnet-base-v2")
+    EMBEDDING_DIM = 768 
+    print(f"[rag] Using local embeddings (SentenceTransformers/all-mpnet-base-v2) — dim={EMBEDDING_DIM}")
 else:
     embedder = None
-    if EMBEDDING_DIM is None:
-        EMBEDDING_DIM = 768
 
+# Groq client for Chat Completions only
 client = AsyncOpenAI(
     api_key=GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1",
@@ -40,21 +38,20 @@ Be specific and honest. If the answer is not in the context, say so clearly.
 Always refer to Sai in third person (e.g. "Sai has worked with...").
 """
 
-
 class RAGPipeline:
 
     async def embed(self, text: str) -> list[float]:
         if USE_LOCAL_EMBED:
-            # Local embedding - synchronous, no network needed
             embedding = embedder.encode(text, convert_to_numpy=True)
             return embedding.flatten().tolist()
 
-        # Use Groq embeddings via the AsyncOpenAI client
-        response = await client.embeddings.create(
+        # Use Nomic for embedding queries
+        output = embed.text(
+            texts=[text],
             model=EMBED_MODEL,
-            input=text,
+            task_type="search_query"
         )
-        return response.data[0].embedding
+        return output['embeddings'][0]
 
     async def retrieve_chunks(self, query_vector: list[float]) -> list[dict]:
         conn = await asyncpg.connect(DATABASE_URL)
