@@ -1,3 +1,7 @@
+import nomic
+# Explicitly set the key from your environment variable
+nomic.login(token=os.getenv("NOMIC_API_KEY"))
+
 from dotenv import load_dotenv
 load_dotenv()
 
