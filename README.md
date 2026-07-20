@@ -1,35 +1,44 @@
 # Ask My Resume - RAG Portfolio Chatbot
 
-A production-ready RAG application that lets anyone chat with your resume/portfolio.
-Built with **FastAPI + pgvector + OpenAI + React + TypeScript**.
+A deployed RAG application that lets visitors chat with Sai's resume and portfolio content.
+The app uses a React frontend, a FastAPI backend, Nomic embeddings, pgvector retrieval, and streamed chat responses.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  User question                                          │
-│       │                                                 │
-│       ▼                                                 │
-│  [Embed question] ──► pgvector cosine search            │
-│                              │                          │
-│                    Top-K relevant chunks                │
-│                              │                          │
-│                    [LLM: GPT-4o / Claude]               │
-│                              │                          │
-│                    Streamed answer ──► React UI         │
-└─────────────────────────────────────────────────────────┘
+## Live App
+
+- Frontend: [ask-resume-cs.vercel.app](https://ask-resume-cs.vercel.app/)
+- Backend: Render FastAPI service, configured in Vercel with `VITE_API_URL`
+- Keep-alive: [cron-job.org](https://cron-job.org/) pings the Render `/health` endpoint so the free Render service wakes up before visitors hit the chat flow
+
+```text
+User question
+     |
+     v
+Embed question with Nomic
+     |
+     v
+pgvector cosine search
+     |
+     v
+Top-K relevant resume chunks
+     |
+     v
+Groq chat completion
+     |
+     v
+Streamed answer in React UI
 ```
 
 ## Stack
 
-| Layer       | Tech                                    |
-|-------------|-----------------------------------------|
-| Frontend    | React + Vite + SSE streaming            |
-| Backend     | FastAPI (Python)                        |
-| Vector DB   | PostgreSQL + pgvector                   |
-| Embeddings  | OpenAI `text-embedding-3-small`         |
-| LLM         | GPT-4o (or Claude via env var)          |
-| Deploy      | Vercel (FE) + Railway/Render (BE)       |
-
----
+| Layer      | Tech                                      |
+|------------|-------------------------------------------|
+| Frontend   | React + Vite + SSE streaming              |
+| Backend    | FastAPI (Python)                          |
+| Vector DB  | PostgreSQL + pgvector                     |
+| Embeddings | Nomic `nomic-embed-text-v1.5`             |
+| LLM        | Groq Chat Completions via OpenAI SDK      |
+| Deploy     | Vercel frontend + Render backend          |
+| Wake-up    | cron-job.org scheduled `/health` request  |
 
 ## Quick Start
 
@@ -50,7 +59,7 @@ source .venv311/bin/activate       # Windows: .venv311\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# Edit .env - add your OPENAI_API_KEY
+# Edit .env with DATABASE_URL, NOMIC_API_KEY, and GROQ_API_KEY
 
 uvicorn main:app --reload --port 8000
 ```
@@ -63,27 +72,28 @@ If you previously created older folders such as `venv/` or `.venv/`, you can rem
 cd frontend
 npm install
 npm run dev
-# → http://localhost:5173
+# http://localhost:5173
 ```
 
-### 4. Ingest your resume
+For local development, set `VITE_API_URL=http://localhost:8000` if the frontend should call the local FastAPI backend directly.
 
-Open the app, click **"⊕ ingest docs"**, paste your resume text, click **"Ingest & embed →"**.
+### 4. Ingest resume content
 
-That's it - start chatting.
+Open the app, click **"+ ingest docs"**, paste resume or portfolio text, then click **"Ingest & embed ->"**.
 
----
+The backend chunks the content, creates Nomic embeddings, and stores the vectors in PostgreSQL.
 
 ## API Endpoints
 
-| Method | Path       | Description                          |
-|--------|------------|--------------------------------------|
-| POST   | `/ingest`  | Chunk, embed, store documents        |
-| POST   | `/chat`    | Stream a RAG-powered answer          |
-| GET    | `/chunks`  | Debug: list stored chunks            |
-| GET    | `/health`  | Health check                         |
+| Method | Path      | Description                   |
+|--------|-----------|-------------------------------|
+| GET    | `/health` | Health check for Render/cron  |
+| POST   | `/ingest` | Chunk, embed, store documents |
+| POST   | `/chat`   | Stream a RAG-powered answer   |
+| GET    | `/chunks` | Debug: list stored chunks     |
 
 ### POST /ingest
+
 ```json
 {
   "text": "Paste resume or portfolio text here...",
@@ -92,46 +102,64 @@ That's it - start chatting.
 ```
 
 ### POST /chat
+
 ```json
 {
   "message": "What databases has Sai worked with?",
   "conversation_history": []
 }
 ```
-Returns a Server-Sent Events stream of `{ "token": "..." }` objects.
 
----
+Returns a Server-Sent Events stream with citation, token, done, or error events.
 
 ## How It Works
 
-### Ingestion pipeline (`ingest.py`)
-1. Split text into **400-char chunks with 80-char overlap**
-2. Embed all chunks in one OpenAI API call
-3. Upsert into `resume_chunks` table with `vector(1536)` column
-4. IVFFlat index for fast cosine similarity search
+### Ingestion pipeline (`backend/ingest.py`)
 
-### RAG pipeline (`rag.py`)
-1. Embed the user's question
-2. Query pgvector: `ORDER BY embedding <=> $1::vector LIMIT 5`
-3. Inject top-5 chunks into the LLM context
-4. Stream the response back via SSE
+1. Split text into 400-character chunks with 80-character overlap.
+2. Embed chunks with Nomic `nomic-embed-text-v1.5` using `task_type="search_document"`.
+3. Store chunks in the `resume_chunks` table with a `vector(768)` embedding column.
+4. Use pgvector for similarity search during chat.
 
-### Frontend (`useRAGChat.js`)
-- Reads SSE stream with `ReadableStream` API
-- Updates React state token-by-token for real-time display
-- Keeps last 6 messages as conversation history
+### RAG pipeline (`backend/rag.py`)
 
----
+1. Embed the user's question with Nomic using `task_type="search_query"`.
+2. Query pgvector with `ORDER BY embedding <=> $1::vector LIMIT 5`.
+3. Send the top chunks as context to the configured Groq chat model.
+4. Stream the response back to the frontend with SSE.
 
-## Switching to Claude
+### Frontend (`frontend/src/hooks/useRAGChat.js`)
 
-In `.env`:
+- Calls the backend `/chat` endpoint.
+- Reads the SSE stream with the `ReadableStream` API.
+- Displays citations and token-by-token responses in the React UI.
+- Keeps recent messages as conversation history.
+
+## Deployment Notes
+
+### Vercel frontend
+
+Set the frontend environment variable:
+
+```text
+VITE_API_URL=https://your-render-service.onrender.com
 ```
-CHAT_MODEL=claude-3-5-sonnet-20241022
+
+### Render backend
+
+Set the backend environment variables:
+
+```text
+DATABASE_URL=postgresql://...
+NOMIC_API_KEY=...
+GROQ_API_KEY=...
+CHAT_MODEL=llama-3.3-70b-versatile
 ```
 
-Then update `rag.py` to use the Anthropic client:
-```python
-from anthropic import AsyncAnthropic
-client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+Render free services can sleep after inactivity, so this deployment uses cron-job.org to call:
+
+```text
+https://your-render-service.onrender.com/health
 ```
+
+A 10- to 14-minute interval keeps the service warm before Render's idle timeout.
