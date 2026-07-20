@@ -2,19 +2,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import httpx
 import asyncpg
 from openai import AsyncOpenAI
-from sentence_transformers import SentenceTransformer
 from typing import AsyncGenerator
 
 DATABASE_URL  = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/resume_db")
-GROQ_API_KEY  = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
+GROQ_API_KEY  = os.getenv("GROQ_API_KEY")
+HF_TOKEN      = os.getenv("HF_TOKEN")
 CHAT_MODEL    = os.getenv("CHAT_MODEL", "llama-3.3-70b-versatile")
+HF_MODEL      = "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_DIM = 384
 TOP_K         = 5
 MAX_TOKENS    = 1024
 
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
+# Local embedding fallback for development (no network needed)
+USE_LOCAL_EMBED = os.getenv("USE_LOCAL_EMBED", "false").lower() == "true"
+if USE_LOCAL_EMBED:
+    from sentence_transformers import SentenceTransformer
+    embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    print("[rag] Using local embeddings (SentenceTransformers)")
+else:
+    embedder = None
 
 client = AsyncOpenAI(
     api_key=GROQ_API_KEY,
@@ -31,7 +40,24 @@ Always refer to Sai in third person (e.g. "Sai has worked with...").
 class RAGPipeline:
 
     async def embed(self, text: str) -> list[float]:
-        return embedder.encode(text, convert_to_numpy=True).flatten().tolist()
+        if USE_LOCAL_EMBED:
+            # Local embedding - synchronous, no network needed
+            embedding = embedder.encode(text, convert_to_numpy=True)
+            return embedding.flatten().tolist()
+        
+        # HuggingFace API fallback
+        async with httpx.AsyncClient() as hf:
+            res = await hf.post(
+                f"https://api-inference.huggingface.co/pipeline/feature-extraction/{HF_MODEL}",
+                headers={"Authorization": f"Bearer {HF_TOKEN}"},
+                json={"inputs": text, "options": {"wait_for_model": True}},
+                timeout=30,
+            )
+            result = res.json()
+            # HF returns nested list for single string — flatten to 1D
+            if isinstance(result[0], list):
+                return result[0]
+            return result
 
     async def retrieve_chunks(self, query_vector: list[float]) -> list[dict]:
         conn = await asyncpg.connect(DATABASE_URL)
