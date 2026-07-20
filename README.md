@@ -135,29 +135,3 @@ Then update `rag.py` to use the Anthropic client:
 from anthropic import AsyncAnthropic
 client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 ```
-
----
-
-## Next Steps (Project 2)
-
-Once this works, extend it:
-- **Tool calling** - let the bot fetch your GitHub stars, LinkedIn, live job postings
-- **Multi-source RAG** - ingest multiple docs (projects, blog posts, case studies)
-- **Evals** - add LangSmith tracing to measure answer quality
-- **React Native** - port to mobile with `@anthropic-ai/sdk`
-
----
-
-## Deployment
-
-**Frontend** → Vercel (just `npm run build` and point Vercel at `/frontend`)
-
-**Backend** → Railway or Render
-- Set `DATABASE_URL` to your hosted PostgreSQL (Railway provides this free)
-- Set `OPENAI_API_KEY`
-- The `pgvector` extension is available on Railway PostgreSQL by default
-
-```bash
-# Set VITE_API_URL in frontend before building for production
-VITE_API_URL=https://your-backend.railway.app npm run build
-```
