@@ -1,4 +1,4 @@
-# Ask My Resume — RAG Portfolio Chatbot
+# Ask My Resume - RAG Portfolio Chatbot
 
 A production-ready RAG application that lets anyone chat with your resume/portfolio.
 Built with **FastAPI + pgvector + OpenAI + React + TypeScript**.
@@ -50,7 +50,7 @@ source .venv311/bin/activate       # Windows: .venv311\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# Edit .env — add your OPENAI_API_KEY
+# Edit .env - add your OPENAI_API_KEY
 
 uvicorn main:app --reload --port 8000
 ```
@@ -70,7 +70,7 @@ npm run dev
 
 Open the app, click **"⊕ ingest docs"**, paste your resume text, click **"Ingest & embed →"**.
 
-That's it — start chatting.
+That's it - start chatting.
 
 ---
 
@@ -141,10 +141,10 @@ client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 ## Next Steps (Project 2)
 
 Once this works, extend it:
-- **Tool calling** — let the bot fetch your GitHub stars, LinkedIn, live job postings
-- **Multi-source RAG** — ingest multiple docs (projects, blog posts, case studies)
-- **Evals** — add LangSmith tracing to measure answer quality
-- **React Native** — port to mobile with `@anthropic-ai/sdk`
+- **Tool calling** - let the bot fetch your GitHub stars, LinkedIn, live job postings
+- **Multi-source RAG** - ingest multiple docs (projects, blog posts, case studies)
+- **Evals** - add LangSmith tracing to measure answer quality
+- **React Native** - port to mobile with `@anthropic-ai/sdk`
 
 ---
 
