@@ -41,10 +41,12 @@ docker-compose up -d
 
 ### 2. Backend setup
 
+This project uses Python 3.11 with a single backend environment named `.venv311`.
+
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate       # Windows: venv\Scripts\activate
+python3.11 -m venv .venv311
+source .venv311/bin/activate       # Windows: .venv311\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
@@ -52,6 +54,8 @@ cp .env.example .env
 
 uvicorn main:app --reload --port 8000
 ```
+
+If you previously created older folders such as `venv/` or `.venv/`, you can remove them to avoid confusion.
 
 ### 3. Frontend setup
 
