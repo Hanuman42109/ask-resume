@@ -2,24 +2,36 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
-import httpx
 import asyncpg
+from openai import AsyncOpenAI
 
 DATABASE_URL  = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/resume_db")
-HF_TOKEN      = os.getenv("HF_TOKEN")
-HF_MODEL      = "sentence-transformers/all-MiniLM-L6-v2"
+GROQ_API_KEY  = os.getenv("GROQ_API_KEY")
 CHUNK_SIZE    = 400
 CHUNK_OVERLAP = 80
-EMBEDDING_DIM = 384
+EMBED_MODEL   = "nomic-embed-text-v1_5"
+EMBEDDING_DIM = None
 
 # Local embedding fallback for development (no network needed)
 USE_LOCAL_EMBED = os.getenv("USE_LOCAL_EMBED", "false").lower() == "true"
 if USE_LOCAL_EMBED:
     from sentence_transformers import SentenceTransformer
     embedder = SentenceTransformer("all-MiniLM-L6-v2")
-    print("[ingest] Using local embeddings (SentenceTransformers)")
+    try:
+        EMBEDDING_DIM = embedder.get_sentence_embedding_dimension()
+    except Exception:
+        # Fallback: infer from a single encode
+        EMBEDDING_DIM = len(embedder.encode("test", convert_to_numpy=True))
+    print(f"[ingest] Using local embeddings (SentenceTransformers) — dim={EMBEDDING_DIM}")
 else:
     embedder = None
+    if EMBEDDING_DIM is None:
+        EMBEDDING_DIM = 768
+
+client = AsyncOpenAI(
+    api_key=GROQ_API_KEY,
+    base_url="https://api.groq.com/openai/v1",
+)
 
 
 def chunk_text(text: str) -> list[str]:
@@ -49,18 +61,13 @@ async def get_embeddings(chunks: list[str]) -> list[list[float]]:
         result = [emb.flatten().tolist() for emb in embeddings]
         print(f"[ingest] Generated {len(result)} embeddings locally")
         return result
-    
-    # HuggingFace API fallback
-    async with httpx.AsyncClient() as client:
-        res = await client.post(
-            f"https://api-inference.huggingface.co/pipeline/feature-extraction/{HF_MODEL}",
-            headers={"Authorization": f"Bearer {HF_TOKEN}"},
-            json={"inputs": chunks, "options": {"wait_for_model": True}},
-            timeout=60,
-        )
-        result = res.json()
-        print(f"[ingest] HF response type: {type(result)}, length: {len(result)}")
-        return result
+    # Use Groq embeddings via the AsyncOpenAI client
+    response = await client.embeddings.create(
+        model=EMBED_MODEL,
+        input=chunks,
+    )
+    embeddings = [item.embedding for item in response.data]
+    return embeddings
 
 
 async def ingest_documents(text: str, source: str) -> int:
@@ -69,7 +76,7 @@ async def ingest_documents(text: str, source: str) -> int:
         if not chunks:
             return 0
 
-        print(f"[ingest] Getting HuggingFace embeddings for {len(chunks)} chunks...")
+        print(f"[ingest] Getting embeddings (Groq) for {len(chunks)} chunks...")
         embeddings = await get_embeddings(chunks)
         print(f"[ingest] Received {len(embeddings)} embeddings")
 

@@ -2,17 +2,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
-import httpx
 import asyncpg
 from openai import AsyncOpenAI
 from typing import AsyncGenerator
 
 DATABASE_URL  = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/resume_db")
 GROQ_API_KEY  = os.getenv("GROQ_API_KEY")
-HF_TOKEN      = os.getenv("HF_TOKEN")
 CHAT_MODEL    = os.getenv("CHAT_MODEL", "llama-3.3-70b-versatile")
-HF_MODEL      = "sentence-transformers/all-MiniLM-L6-v2"
-EMBEDDING_DIM = 384
+EMBED_MODEL   = "nomic-embed-text-v1_5"
+EMBEDDING_DIM = None
 TOP_K         = 5
 MAX_TOKENS    = 1024
 
@@ -21,9 +19,15 @@ USE_LOCAL_EMBED = os.getenv("USE_LOCAL_EMBED", "false").lower() == "true"
 if USE_LOCAL_EMBED:
     from sentence_transformers import SentenceTransformer
     embedder = SentenceTransformer("all-MiniLM-L6-v2")
-    print("[rag] Using local embeddings (SentenceTransformers)")
+    try:
+        EMBEDDING_DIM = embedder.get_sentence_embedding_dimension()
+    except Exception:
+        EMBEDDING_DIM = len(embedder.encode("test", convert_to_numpy=True))
+    print(f"[rag] Using local embeddings (SentenceTransformers) — dim={EMBEDDING_DIM}")
 else:
     embedder = None
+    if EMBEDDING_DIM is None:
+        EMBEDDING_DIM = 768
 
 client = AsyncOpenAI(
     api_key=GROQ_API_KEY,
@@ -44,20 +48,13 @@ class RAGPipeline:
             # Local embedding - synchronous, no network needed
             embedding = embedder.encode(text, convert_to_numpy=True)
             return embedding.flatten().tolist()
-        
-        # HuggingFace API fallback
-        async with httpx.AsyncClient() as hf:
-            res = await hf.post(
-                f"https://api-inference.huggingface.co/pipeline/feature-extraction/{HF_MODEL}",
-                headers={"Authorization": f"Bearer {HF_TOKEN}"},
-                json={"inputs": text, "options": {"wait_for_model": True}},
-                timeout=30,
-            )
-            result = res.json()
-            # HF returns nested list for single string — flatten to 1D
-            if isinstance(result[0], list):
-                return result[0]
-            return result
+
+        # Use Groq embeddings via the AsyncOpenAI client
+        response = await client.embeddings.create(
+            model=EMBED_MODEL,
+            input=text,
+        )
+        return response.data[0].embedding
 
     async def retrieve_chunks(self, query_vector: list[float]) -> list[dict]:
         conn = await asyncpg.connect(DATABASE_URL)
