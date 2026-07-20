@@ -1,15 +1,15 @@
-import nomic
-# Explicitly set the key from your environment variable
-nomic.login(token=os.getenv("NOMIC_API_KEY"))
-
 from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import nomic
 import asyncpg
 from openai import AsyncOpenAI
 from nomic import embed
 from typing import AsyncGenerator
+
+#Authenticate Nomic API
+nomic.login(token=os.getenv("NOMIC_API_KEY"))
 
 # Configuration
 DATABASE_URL  = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/resume_db")
