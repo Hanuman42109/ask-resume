@@ -22,6 +22,8 @@ export default function ChatInput({ onSend, disabled, isWaiting, onClear }) {
     setValue("");
   };
 
+  const sendLabel = isWaiting ? "waiting..." : disabled ? "streaming..." : "send ↵";
+
   return (
     <div className="chat-input-wrapper">
       <span className="input-prompt">{">"}</span>
@@ -44,7 +46,7 @@ export default function ChatInput({ onSend, disabled, isWaiting, onClear }) {
           onClick={submit}
           disabled={disabled || !value.trim()}
         >
-          {isWaiting ? "waiting..." : disabled ? "streaming..." : "send ↵"}
+          {sendLabel}
         </button>
       </div>
     </div>

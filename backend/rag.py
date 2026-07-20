@@ -2,17 +2,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
-from typing import AsyncGenerator
-
 import asyncpg
 from openai import AsyncOpenAI
 from sentence_transformers import SentenceTransformer
+from typing import AsyncGenerator
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/resume_db")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-CHAT_MODEL   = os.getenv("CHAT_MODEL", "llama-3.3-70b-versatile")
-TOP_K        = 5
-MAX_TOKENS   = 1024
+DATABASE_URL  = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/resume_db")
+GROQ_API_KEY  = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
+CHAT_MODEL    = os.getenv("CHAT_MODEL", "llama-3.3-70b-versatile")
+EMBEDDING_DIM = 384
+TOP_K         = 5
+MAX_TOKENS    = 1024
 
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
@@ -30,24 +30,24 @@ Always refer to Sai in third person (e.g. "Sai has worked with...").
 
 class RAGPipeline:
 
-    async def retrieve(self, question: str) -> list[dict]:
-        embedding = embedder.encode(question).tolist()
-        emb_str = "[" + ",".join(map(str, embedding)) + "]"
+    async def embed(self, text: str) -> list[float]:
+        return embedder.encode(text, convert_to_numpy=True).flatten().tolist()
 
+    async def retrieve_chunks(self, query_vector: list[float]) -> list[dict]:
         conn = await asyncpg.connect(DATABASE_URL)
         try:
-            # Use exact cosine similarity with parameterized query
+            vector_str = "[" + ",".join(map(str, query_vector)) + "]"
             rows = await conn.fetch("""
                 SELECT id, source, chunk_index, content,
                        (1 - (embedding <=> $1::vector))::float AS similarity
                 FROM resume_chunks
                 ORDER BY embedding <=> $1::vector
                 LIMIT $2
-            """, emb_str, TOP_K)
+            """, vector_str, TOP_K)
 
             results = [dict(r) for r in rows]
-            top_sim = f"{results[0]['similarity']:.3f}" if results else "N/A"
-            print(f"[retrieve] Found {len(results)} chunks, top similarity: {top_sim}")
+            if results:
+                print(f"[retrieve] {len(results)} chunks, top similarity: {results[0]['similarity']:.3f}")
             return results
         finally:
             await conn.close()
@@ -55,25 +55,13 @@ class RAGPipeline:
     async def stream_answer(
         self,
         question: str,
-        chunks: list[dict],
+        context: str,
         history: list[dict],
     ) -> AsyncGenerator[str, None]:
-
-        if not chunks:
-            context = "No context available."
-        else:
-            context = "\n\n---\n\n".join(
-                f"[{c['source']} | chunk {c['chunk_index']}]\n{c['content']}"
-                for c in chunks
-            )
-
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             *history[-4:],
-            {
-                "role": "user",
-                "content": f"Context:\n\n{context}\n\n---\n\nQuestion: {question}"
-            },
+            {"role": "user", "content": f"Context:\n\n{context}\n\n---\n\nQuestion: {question}"},
         ]
 
         stream = await client.chat.completions.create(

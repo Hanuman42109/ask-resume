@@ -51,26 +51,30 @@ async def ingest(req: IngestRequest):
 async def chat(req: ChatRequest):
     async def event_stream() -> AsyncGenerator[str, None]:
         try:
-            chunks = await rag.retrieve(req.message)
+            # 1. Embed the question
+            query_vector = await rag.embed(req.message)
 
+            # 2. Retrieve chunks and send citations
+            chunks = await rag.retrieve_chunks(query_vector)
             citations = [
-                {
-                    "source": c["source"],
-                    "chunk_index": c["chunk_index"],
-                    "preview": c["content"][:120]
-                }
+                {"source": c["source"], "chunk_index": c["chunk_index"], "preview": c["content"][:120]}
                 for c in chunks
             ]
             yield f"data: {json.dumps({'type': 'citations', 'chunks': citations})}\n\n"
 
-            # Only send role+content to LLM — strip any extra fields
+            # 3. Clean history — only role + content
             clean_history = [
                 {"role": m["role"], "content": m["content"]}
                 for m in req.conversation_history
                 if m.get("content")
             ]
 
-            async for token in rag.stream_answer(req.message, chunks, clean_history):
+            # 4. Stream answer
+            context = "\n\n---\n\n".join(
+                f"[{c['source']} | chunk {c['chunk_index']}]\n{c['content']}"
+                for c in chunks
+            )
+            async for token in rag.stream_answer(req.message, context, clean_history):
                 yield f"data: {json.dumps({'type': 'token', 'value': token})}\n\n"
 
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
