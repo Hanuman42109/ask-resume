@@ -1,95 +1,72 @@
-"""
-RAG Pipeline
-- Embeds questions using sentence-transformers (free, local)
-- Retrieves top-k similar chunks from pgvector
-- Streams answers from Groq (free)
-"""
+from dotenv import load_dotenv
+load_dotenv()
 
 import os
+import asyncpg
+from openai import AsyncOpenAI
+from sentence_transformers import SentenceTransformer
 from typing import AsyncGenerator
 
-import asyncpg
-from dotenv import load_dotenv
-EMBEDDING_MODEL = "text-embedding-3-small"
+DATABASE_URL  = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/resume_db")
+GROQ_API_KEY  = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
+CHAT_MODEL    = os.getenv("CHAT_MODEL", "llama-3.3-70b-versatile")
+EMBEDDING_DIM = 384
+TOP_K         = 5
+MAX_TOKENS    = 1024
 
-# Client for Groq (LLM)
+embedder = SentenceTransformer("all-MiniLM-L6-v2")
+
 client = AsyncOpenAI(
     api_key=GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1",
 )
 
-# Client for OpenAI (Embeddings)
-openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-SYSTEM_PROMPT = """You are a helpful assistant representing Sai's professional portfolio.
-Answer questions about Sai's skills, experience, and projects based ONLY on the context provided.
-Be concise, specific, and honest. If you cannot find the answer in the context, say so clearly.
-Never fabricate experience or skills not present in the context.
-Speak in third person about Sai (e.g. "Sai has experience with...").
+SYSTEM_PROMPT = """You are a helpful assistant for Sai's professional portfolio.
+Answer questions about Sai's skills, experience, and projects using ONLY the provided context.
+Be specific and honest. If the answer is not in the context, say so clearly.
+Always refer to Sai in third person (e.g. "Sai has worked with...").
 """
 
 
 class RAGPipeline:
 
-    # ── Embed ──────────────────────────────────────────────────────────────────
-
     async def embed(self, text: str) -> list[float]:
-        response = await openai_client.embeddings.create(
-            input=text,
-            model=EMBEDDING_MODEL
-        )
-        return response.data[0].embedding
+        return embedder.encode(text, convert_to_numpy=True).flatten().tolist()
 
-    # ── Retrieve ───────────────────────────────────────────────────────────────
-
-    async def retrieve(self, question: str, top_k: int = TOP_K) -> list[dict]:
-        q_embedding = await self.embed(question)
-        embedding_str = f"[{','.join(map(str, q_embedding))}]"
-
+    async def retrieve_chunks(self, query_vector: list[float]) -> list[dict]:
         conn = await asyncpg.connect(DATABASE_URL)
         try:
-            rows = await conn.fetch(
-                """
-                SELECT id, content, source, chunk_index,
-                       1 - (embedding <=> $1::vector) AS similarity
+            vector_str = "[" + ",".join(map(str, query_vector)) + "]"
+            rows = await conn.fetch("""
+                SELECT id, source, chunk_index, content,
+                       (1 - (embedding <=> $1::vector))::float AS similarity
                 FROM resume_chunks
                 ORDER BY embedding <=> $1::vector
                 LIMIT $2
-                """,
-                embedding_str,
-                top_k,
-            )
-            return [dict(r) for r in rows]
+            """, vector_str, TOP_K)
+
+            results = [dict(r) for r in rows]
+            if results:
+                print(f"[retrieve] {len(results)} chunks, top similarity: {results[0]['similarity']:.3f}")
+            return results
         finally:
             await conn.close()
 
-    # ── Stream from pre-retrieved chunks ───────────────────────────────────────
-
-    async def stream_from_chunks(
+    async def stream_answer(
         self,
         question: str,
-        chunks: list[dict],
+        context: str,
         history: list[dict],
     ) -> AsyncGenerator[str, None]:
-        context = "\n\n---\n\n".join(
-            f"[Source: {c['source']} | Chunk {c['chunk_index']}]\n{c['content']}"
-            for c in chunks
-        )
-
         messages = [
-            *history[-6:],
-            {
-                "role": "user",
-                "content": (
-                    f"Context from Sai's resume/portfolio:\n\n{context}"
-                    f"\n\n---\n\nQuestion: {question}"
-                ),
-            },
+            {"role": "system", "content": SYSTEM_PROMPT},
+            *history[-4:],
+            {"role": "user", "content": f"Context:\n\n{context}\n\n---\n\nQuestion: {question}"},
         ]
 
         stream = await client.chat.completions.create(
             model=CHAT_MODEL,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}, *messages],
+            messages=messages,
             max_tokens=MAX_TOKENS,
             stream=True,
             temperature=0.3,
@@ -99,8 +76,6 @@ class RAGPipeline:
             delta = chunk.choices[0].delta.content
             if delta:
                 yield delta
-
-    # ── Debug ──────────────────────────────────────────────────────────────────
 
     async def list_chunks(self) -> list[dict]:
         conn = await asyncpg.connect(DATABASE_URL)
