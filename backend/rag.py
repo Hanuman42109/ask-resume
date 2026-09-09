@@ -14,7 +14,7 @@ nomic.login(token=os.getenv("NOMIC_API_KEY"))
 # Configuration
 DATABASE_URL  = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/resume_db")
 GROQ_API_KEY  = os.getenv("GROQ_API_KEY")
-CHAT_MODEL    = os.getenv("CHAT_MODEL", "llama-3.3-70b-versatile")
+CHAT_MODEL    = os.getenv("CHAT_MODEL", "openai/gpt-oss-120b")
 EMBED_MODEL   = "nomic-embed-text-v1.5"
 EMBEDDING_DIM = 768
 TOP_K         = 5
