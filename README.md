@@ -156,10 +156,19 @@ GROQ_API_KEY=...
 CHAT_MODEL=openai/gpt-oss-120b
 ```
 
+`DATABASE_URL` points to a [Supabase](https://supabase.com) Postgres project (pgvector enabled) —
+use the **Session pooler** connection string from Supabase's Connect dialog, not the direct
+connection (which is IPv6-only and unreachable from Render) or the Transaction pooler (which
+breaks asyncpg's prepared statements). Render's own free Postgres was used previously but was
+dropped after its free-tier database expired and was deleted (Render deletes free databases
+30 days after creation, plus a 14-day grace period).
+
 Render free services can sleep after inactivity, so this deployment uses cron-job.org to call:
 
 ```text
 https://your-render-service.onrender.com/health
 ```
 
-A 10- to 14-minute interval keeps the service warm before Render's idle timeout.
+A 10- to 14-minute interval keeps the service warm before Render's idle timeout. `/health` also
+runs a trivial `SELECT 1` against the database, so the same ping keeps Supabase's free-tier
+project from pausing after 7 days of inactivity.
