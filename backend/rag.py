@@ -14,7 +14,7 @@ nomic.login(token=os.getenv("NOMIC_API_KEY"))
 # Configuration
 DATABASE_URL  = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/resume_db")
 GROQ_API_KEY  = os.getenv("GROQ_API_KEY")
-CHAT_MODEL    = os.getenv("CHAT_MODEL", "llama-3.3-70b-versatile")
+CHAT_MODEL    = os.getenv("CHAT_MODEL", "openai/gpt-oss-120b")
 EMBED_MODEL   = "nomic-embed-text-v1.5"
 EMBEDDING_DIM = 768
 TOP_K         = 5
@@ -40,6 +40,9 @@ SYSTEM_PROMPT = """You are a helpful assistant for Sai's professional portfolio.
 Answer questions about Sai's skills, experience, and projects using ONLY the provided context.
 Be specific and honest. If the answer is not in the context, say so clearly.
 Always refer to Sai in third person (e.g. "Sai has worked with...").
+Write in clean markdown prose. Do not include inline citation markers, brackets,
+or references to chunks/sources (e.g. "[chunk 2]", "[source | chunk 2]") in your
+answer — sources are already shown separately to the user.
 """
 
 class RAGPipeline:
