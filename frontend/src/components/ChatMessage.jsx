@@ -1,4 +1,6 @@
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function ChatMessage({ message }) {
   const isUser = message.role === "user";
@@ -33,7 +35,11 @@ export default function ChatMessage({ message }) {
             <span className="loading-text">thinking...</span>
           </span>
         ) : message.content ? (
-          message.content
+          isUser ? (
+            message.content
+          ) : (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+          )
         ) : (
           <span className="cursor-blink">▊</span>
         )}
