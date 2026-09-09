@@ -104,6 +104,13 @@ class RAGPipeline:
             if delta:
                 yield delta
 
+    async def check_db(self) -> None:
+        conn = await asyncpg.connect(DATABASE_URL)
+        try:
+            await conn.fetchval("SELECT 1")
+        finally:
+            await conn.close()
+
     async def list_chunks(self) -> list[dict]:
         conn = await asyncpg.connect(DATABASE_URL)
         try:

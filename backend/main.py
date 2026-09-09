@@ -35,7 +35,12 @@ class IngestRequest(BaseModel):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    try:
+        await rag.check_db()
+        return {"status": "ok", "database": "connected"}
+    except Exception as e:
+        print(f"[health] Database check failed: {e}")
+        return {"status": "degraded", "database": "unreachable"}
 
 
 @app.post("/ingest")
